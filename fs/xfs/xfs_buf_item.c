@@ -1038,7 +1038,6 @@ xfs_buf_do_callbacks_fail(
 	struct xfs_buf		*bp)
 {
 	struct xfs_log_item	*lip;
-	struct xfs_ail		*ailp;
 
 	/*
 	 * Buffer log item errors are handled directly by xfs_buf_item_push()
@@ -1050,13 +1049,10 @@ xfs_buf_do_callbacks_fail(
 
 	lip = list_first_entry(&bp->b_li_list, struct xfs_log_item,
 			li_bio_list);
-	ailp = lip->li_ailp;
-	spin_lock(&ailp->ail_lock);
 	list_for_each_entry(lip, &bp->b_li_list, li_bio_list) {
 		if (lip->li_ops->iop_error)
 			lip->li_ops->iop_error(lip, bp);
 	}
-	spin_unlock(&ailp->ail_lock);
 }
 
 static bool

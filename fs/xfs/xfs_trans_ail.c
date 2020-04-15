@@ -368,15 +368,23 @@ xfsaild_resubmit_item(
 {
 	struct xfs_buf		*bp = lip->li_buf;
 
-	if (!xfs_buf_trylock(bp))
+	/*
+	 * Log item state bits are racy so we cannot assume the temporary buffer
+	 * pointer is set. Treat the item as locked if the pointer is clear or
+	 * the failure state has changed once we've locked out I/O completion.
+	 */
+	if (!bp || !xfs_buf_trylock(bp))
 		return XFS_ITEM_LOCKED;
+	if (!test_bit(XFS_LI_FAILED, &lip->li_flags)) {
+		xfs_buf_unlock(bp);
+		return XFS_ITEM_LOCKED;
+	}
 
 	if (!xfs_buf_delwri_queue(bp, buffer_list)) {
 		xfs_buf_unlock(bp);
 		return XFS_ITEM_FLUSHING;
 	}
 
-	/* protected by ail_lock */
 	list_for_each_entry(lip, &bp->b_li_list, li_bio_list)
 		xfs_clear_li_failed(lip);
 

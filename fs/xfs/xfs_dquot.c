@@ -1023,34 +1023,23 @@ xfs_qm_dqflush_done(
 	struct xfs_ail		*ailp = lip->li_ailp;
 
 	/*
-	 * We only want to pull the item from the AIL if its
-	 * location in the log has not changed since we started the flush.
-	 * Thus, we only bother if the dquot's lsn has
-	 * not changed. First we check the lsn outside the lock
-	 * since it's cheaper, and then we recheck while
-	 * holding the lock before removing the dquot from the AIL.
+	 * Only pull the item from the AIL if its location in the log has not
+	 * changed since it was flushed. Do a lockless check first to reduce
+	 * lock traffic.
 	 */
-	if (test_bit(XFS_LI_IN_AIL, &lip->li_flags) &&
-	    ((lip->li_lsn == qip->qli_flush_lsn) ||
-	     test_bit(XFS_LI_FAILED, &lip->li_flags))) {
+	if (!test_bit(XFS_LI_IN_AIL, &lip->li_flags) ||
+	    lip->li_lsn != qip->qli_flush_lsn)
+		goto out;
 
-		/* xfs_trans_ail_delete() drops the AIL lock. */
-		spin_lock(&ailp->ail_lock);
-		if (lip->li_lsn == qip->qli_flush_lsn) {
-			xfs_trans_ail_delete(ailp, lip, SHUTDOWN_CORRUPT_INCORE);
-		} else {
-			/*
-			 * Clear the failed state since we are about to drop the
-			 * flush lock
-			 */
-			xfs_clear_li_failed(lip);
-			spin_unlock(&ailp->ail_lock);
-		}
-	}
+	spin_lock(&ailp->ail_lock);
+	if (lip->li_lsn == qip->qli_flush_lsn)
+		/* xfs_trans_ail_delete() drops the AIL lock */
+		xfs_trans_ail_delete(ailp, lip, SHUTDOWN_CORRUPT_INCORE);
+	else
+		spin_unlock(&ailp->ail_lock);
 
-	/*
-	 * Release the dq's flush lock since we're done with it.
-	 */
+out:
+	xfs_clear_li_failed(lip);
 	xfs_dqfunlock(dqp);
 }
 

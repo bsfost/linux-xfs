@@ -682,9 +682,7 @@ xfs_iflush_done(
 	 * Scan the buffer IO completions for other inodes being completed and
 	 * attach them to the current inode log item.
 	 */
-
 	list_add_tail(&lip->li_bio_list, &tmp);
-
 	list_for_each_entry_safe(blip, n, &bp->b_li_list, li_bio_list) {
 		if (lip->li_cb != xfs_iflush_done)
 			continue;
@@ -695,15 +693,13 @@ xfs_iflush_done(
 		 * the AIL lock.
 		 */
 		iip = INODE_ITEM(blip);
-		if ((iip->ili_logged && blip->li_lsn == iip->ili_flush_lsn) ||
-		    test_bit(XFS_LI_FAILED, &blip->li_flags))
+		if (iip->ili_logged && blip->li_lsn == iip->ili_flush_lsn)
 			need_ail++;
 	}
 
 	/* make sure we capture the state of the initial inode. */
 	iip = INODE_ITEM(lip);
-	if ((iip->ili_logged && lip->li_lsn == iip->ili_flush_lsn) ||
-	    test_bit(XFS_LI_FAILED, &lip->li_flags))
+	if (iip->ili_logged && lip->li_lsn == iip->ili_flush_lsn)
 		need_ail++;
 
 	/*
@@ -732,8 +728,6 @@ xfs_iflush_done(
 				xfs_lsn_t lsn = xfs_ail_delete_one(ailp, blip);
 				if (!tail_lsn && lsn)
 					tail_lsn = lsn;
-			} else {
-				xfs_clear_li_failed(blip);
 			}
 		}
 		xfs_ail_update_finish(ailp, tail_lsn);
@@ -746,6 +740,7 @@ xfs_iflush_done(
 	 */
 	list_for_each_entry_safe(blip, n, &tmp, li_bio_list) {
 		list_del_init(&blip->li_bio_list);
+		xfs_clear_li_failed(blip);
 		iip = INODE_ITEM(blip);
 		iip->ili_logged = 0;
 		iip->ili_last_fields = 0;
