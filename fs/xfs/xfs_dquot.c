@@ -1021,6 +1021,7 @@ xfs_qm_dqflush_done(
 	struct xfs_dq_logitem	*qip = (struct xfs_dq_logitem *)lip;
 	struct xfs_dquot	*dqp = qip->qli_dquot;
 	struct xfs_ail		*ailp = lip->li_ailp;
+	xfs_lsn_t		tail_lsn;
 
 	/*
 	 * Only pull the item from the AIL if its location in the log has not
@@ -1032,10 +1033,11 @@ xfs_qm_dqflush_done(
 		goto out;
 
 	spin_lock(&ailp->ail_lock);
-	if (lip->li_lsn == qip->qli_flush_lsn)
-		/* xfs_trans_ail_delete() drops the AIL lock */
-		xfs_trans_ail_delete(ailp, lip, SHUTDOWN_CORRUPT_INCORE);
-	else
+	if (lip->li_lsn == qip->qli_flush_lsn) {
+		/* xfs_ail_update_finish() drops the AIL lock */
+		tail_lsn = xfs_ail_delete_one(ailp, lip);
+		xfs_ail_update_finish(ailp, tail_lsn);
+	} else
 		spin_unlock(&ailp->ail_lock);
 
 out:
@@ -1149,7 +1151,7 @@ xfs_qm_dqflush(
 
 out_abort:
 	dqp->dq_flags &= ~XFS_DQ_DIRTY;
-	xfs_trans_ail_remove(lip, SHUTDOWN_CORRUPT_INCORE);
+	xfs_trans_ail_remove(lip);
 	xfs_force_shutdown(mp, SHUTDOWN_CORRUPT_INCORE);
 out_unlock:
 	xfs_dqfunlock(dqp);
