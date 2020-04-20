@@ -1684,10 +1684,12 @@ xfs_wait_buftarg(
 			struct xfs_buf *bp;
 			bp = list_first_entry(&dispose, struct xfs_buf, b_lru);
 			list_del_init(&bp->b_lru);
-			if (bp->b_flags & XBF_WRITE_FAIL) {
+			if (bp->b_flags & XBF_WRITE_FAIL &&
+			    ___ratelimit(&bp->b_target->bt_ioerror_rl,
+					 "XFS: Corruption Alert")) {
 				xfs_alert(btp->bt_mount,
 "Corruption Alert: Buffer at daddr 0x%llx had permanent write failures!",
-					(long long)bp->b_bn);
+					  (long long)bp->b_bn);
 				xfs_alert(btp->bt_mount,
 "Please run xfs_repair to determine the extent of the problem.");
 			}
@@ -1827,6 +1829,13 @@ xfs_alloc_buftarg(
 	btp->bt_dev =  bdev->bd_dev;
 	btp->bt_bdev = bdev;
 	btp->bt_daxdev = dax_dev;
+
+	/*
+	 * Buffer IO error rate limiting. Limit it to no more than 10 messages
+	 * per 30 seconds so as to not spam logs too much on repeated errors.
+	 */
+	ratelimit_state_init(&btp->bt_ioerror_rl, 30 * HZ,
+			     DEFAULT_RATELIMIT_BURST);
 
 	if (xfs_setsize_buftarg_early(btp, bdev))
 		goto error_free;

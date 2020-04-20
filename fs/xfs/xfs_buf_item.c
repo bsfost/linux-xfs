@@ -480,14 +480,6 @@ xfs_buf_item_unpin(
 	}
 }
 
-/*
- * Buffer IO error rate limiting. Limit it to no more than 10 messages per 30
- * seconds so as to not spam logs too much on repeated detection of the same
- * buffer being bad..
- */
-
-static DEFINE_RATELIMIT_STATE(xfs_buf_write_fail_rl_state, 30 * HZ, 10);
-
 STATIC uint
 xfs_buf_item_push(
 	struct xfs_log_item	*lip,
@@ -518,7 +510,7 @@ xfs_buf_item_push(
 
 	/* has a previous flush failed due to IO errors? */
 	if ((bp->b_flags & XBF_WRITE_FAIL) &&
-	    ___ratelimit(&xfs_buf_write_fail_rl_state, "XFS: Failing async write")) {
+	    ___ratelimit(&bp->b_target->bt_ioerror_rl, "XFS: Failing async write")) {
 		xfs_warn(bp->b_mount,
 "Failing async write on buffer block 0x%llx. Retrying async write.",
 			 (long long)bp->b_bn);
